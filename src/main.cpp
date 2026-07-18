@@ -8,21 +8,23 @@
 // ═════════════════════════════════════════════════════════════
 
 // ── INPUTS ────────────────────────────────────────────────────
+//  Inputs are active LOW: switch connects the pin to GND.
 IOInput INPUTS[] = {
-    {"button", "Button Input", I0_0},
-    // { "door",     "Door Sensor",   I0_1 },
-    // { "motion",   "Motion Sensor", I0_2 },
-    // { "sensor_3", "Sensor 3",      I0_3 },
-    // { "sensor_4", "Sensor 4",      I0_4 },
-    // { "sensor_5", "Sensor 5",      I0_5 },
+    {"right_sw", "Switch Right", I0_0}, // LOW = right position active
+    {"left_sw", "Switch Left", I0_1},   // LOW = left  position active
+                                        // { "i0_2", "Input 2", I0_2 },
+                                        // { "i0_3", "Input 3", I0_3 },
+                                        // { "i0_4", "Input 4", I0_4 },
+                                        // { "i0_5", "Input 5", I0_5 },
 };
 
 // ── OUTPUTS ───────────────────────────────────────────────────
+//  All outputs run at 24 V (Mean Well HDR-60-24, mode pin = HIGH).
 IOOutput OUTPUTS[] = {
-    {"relay", "Relay", Q0_0, S0_24v, HIGH, true},
-    {"wifi_led", "WiFi LED", Q0_1, S1_24v, LOW, false},
-    // { "output_2", "Output 2", Q0_2, S2_24v, HIGH, true  },
-    // { "output_3", "Output 3", Q0_3, S3_24v, HIGH, true  },
+    {"well_pump", "Well Pump", Q0_0, S0_24v, HIGH, true},    // Finder 40.52 relay coil
+    {"tank_pump", "Tank Pump", Q0_1, S1_24v, HIGH, true},    // Finder 40.52 relay coil
+    {"switch_led", "Switch LED", Q0_2, S2_24v, HIGH, false}, // 3-state switch LED
+                                                             // { "output_3", "Output 3", Q0_3, S3_24v, HIGH, true },
 };
 
 const int NUM_INPUTS = sizeof(INPUTS) / sizeof(INPUTS[0]);
