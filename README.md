@@ -175,3 +175,14 @@ pio run --target upload --upload-port <IP_ADDRESS>
 # Open serial monitor
 pio device monitor
 ```
+
+```tikz
+\usepackage{circuitikz}
+\begin{document}
+\begin{circuitikz}
+  \draw (0,0) to[battery1, l=$V_s$] (0,3)
+              to[R=$R_1$] (3,3)
+              to[C=$C_1$] (3,0) -- (0,0);
+\end{circuitikz}
+\end{document}
+```

@@ -1,0 +1,39 @@
+name: Render CircuiTikZ Diagrams
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.md'   # Only triggers when a Markdown file changes
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Needed to commit generated SVGs back to repo
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install LaTeX and conversion tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            texlive-pictures \
+            texlive-science \
+            texlive-latex-extra \
+            dvisvgm
+
+      - name: Make script executable
+        run: chmod +x .github/scripts/tikz_to_svg.sh
+
+      - name: Extract and render CircuiTikZ blocks
+        run: .github/scripts/tikz_to_svg.sh
+
+      - name: Commit and push generated SVGs
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "🤖 Auto-render CircuiTikZ diagrams to SVG"
+          file_pattern: "docs/images/*.svg README.md"
