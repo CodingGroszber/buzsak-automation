@@ -175,7 +175,7 @@ pio run --target upload --upload-port <IP_ADDRESS>
 # Open serial monitor
 pio device monitor
 ```
-## Circut Diagram (placeholder)
+## Circut Diagram ( placeholder )
 ```tikz
 \usepackage{circuitikz}
 \begin{document}
