@@ -17,6 +17,7 @@ Firmware for an **Industrial Shields ESP32 PLC 14 IO** (`14iosplc_ma`) used as a
 | 3-state selector switch LED | +V → `Q0_2`, −V → GND |
 | Switch right contact (NC) | `I0_0` → GND (active LOW) |
 | Switch left contact (NC) | `I0_1` → GND (active LOW) |
+| WiFi status LED | `Q0_3` (blinks while connecting, solid = linked) |
 
 ---
 
@@ -74,7 +75,7 @@ Digital I/Os are managed through an on-board **MCP23017 I2C GPIO expander** (add
 | `Q0_0` | GPIO 12 | `S0_24v` (`0x200F`) | Well pump relay coil (24 V) |
 | `Q0_1` | GPIO 25 | `S1_24v` (`0x200E`) | Tank pump relay coil (24 V) |
 | `Q0_2` | GPIO 26 | `S2_24v` (`0x2001`) | Switch LED (24 V) |
-| `Q0_3` | GPIO 27 | `S3_24v` (`0x2000`) | Available |
+| `Q0_3` | GPIO 27 | `S3_24v` (`0x2000`) | WiFi status LED (24 V) |
 
 Set the mode pin **before** writing to the output:
 ```cpp

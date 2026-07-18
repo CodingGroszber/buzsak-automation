@@ -24,7 +24,7 @@ IOOutput OUTPUTS[] = {
     {"well_pump", "Well Pump", Q0_0, S0_24v, HIGH, true},    // Finder 40.52 relay coil
     {"tank_pump", "Tank Pump", Q0_1, S1_24v, HIGH, true},    // Finder 40.52 relay coil
     {"switch_led", "Switch LED", Q0_2, S2_24v, HIGH, false}, // 3-state switch LED
-                                                             // { "output_3", "Output 3", Q0_3, S3_24v, HIGH, true },
+    {"wifi_led", "WiFi LED", Q0_3, S3_24v, HIGH, false},     // blinks while connecting, solid = linked
 };
 
 const int NUM_INPUTS = sizeof(INPUTS) / sizeof(INPUTS[0]);
