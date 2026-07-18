@@ -176,13 +176,4 @@ pio run --target upload --upload-port <IP_ADDRESS>
 pio device monitor
 ```
 ## Circut Diagram ( placeholder )
-```tikz
-\usepackage{circuitikz}
-\begin{document}
-\begin{circuitikz}
-  \draw (0,0) to[battery1, l=$V_s$] (0,3)
-              to[R=$R_1$] (3,3)
-              to[C=$C_1$] (3,0) -- (0,0);
-\end{circuitikz}
-\end{document}
-```
+![Circuit Diagram 1](docs/images/circuit_1.svg)
