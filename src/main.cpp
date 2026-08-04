@@ -2,6 +2,7 @@
 #include "io_config.h"
 #include "wifi_network.h"
 #include "logic.h"
+#include "diag.h"
 
 // ═════════════════════════════════════════════════════════════
 //  IO LAYOUT — Edit here to add/remove sensors and relays
@@ -27,8 +28,16 @@ IOOutput OUTPUTS[] = {
     {"wifi_led", "WiFi LED", Q0_3, S3_24v, HIGH, false},     // blinks while connecting, solid = linked
 };
 
+// ── ANALOG INPUTS ────────────────────────────────────────────
+//  4–20 mA channels; raw ADC value 0–4095 (12-bit).
+IOAnalog ANALOG_INPUTS[] = {
+    {"pressure", "Pressure Sensor", I0_7},       // 4–20 mA channel 0
+    {"water_level", "Water Level Sensor", I0_8}, // 4–20 mA channel 1
+};
+
 const int NUM_INPUTS = sizeof(INPUTS) / sizeof(INPUTS[0]);
 const int NUM_OUTPUTS = sizeof(OUTPUTS) / sizeof(OUTPUTS[0]);
+const int NUM_ANALOG_SENSORS = sizeof(ANALOG_INPUTS) / sizeof(ANALOG_INPUTS[0]);
 
 // ── WiFi LED helper ───────────────────────────────────────────
 int wifiLedIndex()
@@ -60,13 +69,19 @@ void setup()
   for (int i = 0; i < NUM_INPUTS; i++)
     pinMode(INPUTS[i].pin, INPUT);
 
+  // Initialise analog inputs
+  for (int i = 0; i < NUM_ANALOG_SENSORS; i++)
+    pinMode(ANALOG_INPUTS[i].pin, INPUT);
+
   setupNetwork();
+  diagSetup();
 }
 
-// ── Loop ──────────────────────────────────────────────────────
+// ── Loop ────────────────────────────────────────────
 void loop()
 {
   loopNetwork();
+  diagLoop();
   plcLoop();
   delay(50);
 }

@@ -70,6 +70,19 @@ static void handleApiState()
         json += "\"state\":" + String(s ? "true" : "false") + ",";
         json += "\"controllable\":" + String(OUTPUTS[i].controllable ? "true" : "false") + "}";
     }
+    json += "],";
+
+    json += "\"analog\":[";
+    for (int i = 0; i < NUM_ANALOG_SENSORS; i++)
+    {
+        if (i)
+            json += ",";
+        int raw = analogRead(ANALOG_INPUTS[i].pin);
+        json += "{\"name\":\"" + String(ANALOG_INPUTS[i].name) + "\",";
+        json += "\"label\":\"" + String(ANALOG_INPUTS[i].label) + "\",";
+        json += "\"raw\":" + String(raw) + ",";
+        json += "\"signal\":" + String(raw == 65535 ? "false" : "true") + "}";
+    }
     json += "]";
 
     json += "}";
@@ -145,6 +158,17 @@ static void handleRoot()
         bool s = digitalRead(OUTPUTS[i].pin);
         html += "<div class='card'><div class='label'>" + String(OUTPUTS[i].label) + "</div>";
         html += "<div class='value " + String(s ? "on" : "off") + "'>" + String(s ? "&#9889; ON" : "&#9675; OFF") + "</div></div>";
+    }
+
+    html += "<h2>Analog Inputs (raw ADC)</h2>";
+    for (int i = 0; i < NUM_ANALOG_SENSORS; i++)
+    {
+        int raw = analogRead(ANALOG_INPUTS[i].pin);
+        bool noSignal = (raw == 65535);
+        html += "<div class='card'><div class='label'>" + String(ANALOG_INPUTS[i].label) + "</div>";
+        html += "<div class='value " + String(noSignal ? "off" : "neutral") + "'>";
+        html += noSignal ? "&#9675; No signal (&lt;4mA)" : (String(raw) + " / 4095");
+        html += "</div></div>";
     }
 
     html += "<a class='btn' href='/update'>&#128295; Upload Firmware</a>";

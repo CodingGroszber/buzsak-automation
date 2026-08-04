@@ -35,10 +35,19 @@ struct IOOutput
     bool controllable; // true = settable via POST /api/control
 };
 
+struct IOAnalog
+{
+    const char *name;  // API / app key  e.g. "pressure"
+    const char *label; // Human label    e.g. "Pressure Sensor"
+    int pin;           // ADC pin        e.g. I0_7_MA
+};
+
 extern IOInput INPUTS[];
 extern IOOutput OUTPUTS[];
+extern IOAnalog ANALOG_INPUTS[];
 extern const int NUM_INPUTS;
 extern const int NUM_OUTPUTS;
+extern const int NUM_ANALOG_SENSORS;
 
 // Returns the index of the "wifi_led" output, or -1 if not present
 int wifiLedIndex();
