@@ -18,6 +18,8 @@ Firmware for an **Industrial Shields ESP32 PLC 14 IO** (`14iosplc_ma`) used as a
 | Switch right contact (NC) | `I0_0` → GND (active LOW) |
 | Switch left contact (NC) | `I0_1` → GND (active LOW) |
 | WiFi status LED | `Q0_3` (blinks while connecting, solid = linked) |
+| Pressure sensor | TOSEASTARS PT506, 0–10 bar, 4–20 mA → Red (IN+) to 24V+, Black (IN−) to `I0_7` |
+| Water level sensor | YWBL-WH TL-136, 0–1 m, 4–20 mA → Red (IN+) to 24V+, Black (IN−) to `I0_8` |
 
 ---
 
@@ -112,6 +114,7 @@ digitalWrite(Q0_0, LOW);      // output OFF
   - `POST /api/control` — override any `controllable` output (`name=<key>&state=<1|0>`)
 - **Built-in status page** — `GET /` serves a dark-theme HTML dashboard that auto-refreshes every 2 seconds
 - **WiFi watchdog** — automatically reconnects if the connection drops
+- **Analog probe diagnostic** — build with `-DDIAG_ENABLED=1` to expose `/diag` (live HTML), `/diag.csv` (download), `/diag/clear`; samples GPIO 32/33 raw + calibrated + mV + derived current/voltage every 2 s and logs to LittleFS
 
 ---
 
@@ -119,13 +122,15 @@ digitalWrite(Q0_0, LOW);      // output OFF
 
 ```
 src/
-  main.cpp          # IO layout (INPUTS[], OUTPUTS[]), setup(), loop()
+  main.cpp          # IO layout (INPUTS[], OUTPUTS[], ANALOG_INPUTS[]), setup(), loop()
   wifi_network.cpp  # WiFi, HTTP handlers, ArduinoOTA, ElegantOTA
   logic.cpp         # PLC scan cycle — the actual automation program
+  diag.cpp          # Analog probe diagnostic (compiled in only when DIAG_ENABLED=1)
 include/
   io_config.h       # Shared IO structs, extern declarations, FIRMWARE_VERSION
   wifi_network.h    # Public API of wifi_network.cpp
   logic.h           # Public API of logic.cpp
+  diag.h            # Diagnostic config macros and diagSetup()/diagLoop() declarations
 platformio.ini      # PlatformIO build configuration
 ```
 
@@ -147,7 +152,22 @@ Add ladder rungs or sequential logic inside `plcLoop()` in `src/logic.cpp`. The 
 | Firmware version | `include/io_config.h` | `v4.0` |
 | OTA hostname | `src/wifi_network.cpp` | `PLC-14IO-Cabinet1` |
 | OTA password | `src/wifi_network.cpp` | `admin` |
-| Upload port | `platformio.ini` | `COM3` |
+| Upload port | `platformio.ini` | `COM3` (USB) / `192.168.1.94` (OTA) |
+| Diagnostic enable | `platformio.ini` `build_flags` | `DIAG_ENABLED=1` (currently on) |
+| Shunt resistance | `include/diag.h` `DIAG_SHUNT_OHMS` | `165.0` Ω |
+| Voltage divider | `include/diag.h` `DIAG_V_DIVIDER` | `3.0303` |
+| Diag sample interval | `include/diag.h` `DIAG_INTERVAL_MS` | `2000` ms |
+| Diag CSV size cap | `include/diag.h` `DIAG_MAX_BYTES` | `512 KB` |
+
+---
+
+## Known issues / in progress
+
+| # | Issue | Status |
+|---|-------|--------|
+| 1 | **Analog inputs reading invalid values** — pressure (PT506) and water level (TL-136) sensors wired correctly (Red→24V+, Black→`I0_7`/`I0_8`, GND→DC−) but `/diag` not yet readable because OTA upload is blocked by Windows Firewall on the dev machine. Diagnostic firmware is built and committed (`DIAG_ENABLED=1`). | **Open** — flash pending; workaround: allow Python through Windows Firewall then re-run OTA upload to `192.168.1.94`. |
+| 2 | **OTA upload fails from this PC** — `espota` authenticates (`OK`) but times out waiting for device response. Root cause: Windows Firewall blocks the inbound TCP connection the ESP32 opens back to the OTA host. | **Open** — fix: `Windows Defender Firewall → Allow an app → python.exe` (private network). |
+| 3 | **`DIAG_ENABLED=1` left on in repo** — diagnostic routes and LittleFS logging active in production build; should be set back to `0` once sensor readings are verified. | **Open** |
 
 ---
 
@@ -169,11 +189,13 @@ pio run
 # Upload over USB
 pio run --target upload
 
-# Upload over WiFi (after first USB flash)
-pio run --target upload --upload-port <IP_ADDRESS>
+# Upload over WiFi (after first USB flash) — use IP, not hostname (mDNS not resolved by espota)
+pio run --target upload --upload-port 192.168.1.94
 
 # Open serial monitor
 pio device monitor
 ```
+
+> **OTA note:** if upload authenticates but then times out, Windows Firewall is blocking the inbound callback from the device. Allow `python.exe` through the firewall (private network) and retry.
 ## Circut Diagram ( placeholder )
 ![Circuit Diagram 1](docs/images/circuit_1.svg)
