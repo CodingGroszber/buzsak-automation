@@ -112,6 +112,10 @@ static const char INDEX_HTML[] = R"HTML(
             padding: 9px 11px
         }
 
+        .card-active {
+            border-color: var(--on)
+        }
+
         .card-lbl {
             font-size: 10px;
             color: var(--dim);
@@ -230,8 +234,8 @@ static const char INDEX_HTML[] = R"HTML(
     <script>
         var t0 = Date.now();
 
-        function card(lbl, valHtml, sub, cls) {
-            return '<div class="card"><div class="card-lbl">' + lbl + '</div>'
+        function card(lbl, valHtml, sub, cls, cardCls) {
+            return '<div class="card ' + (cardCls || '') + '"><div class="card-lbl">' + lbl + '</div>'
                 + '<div class="card-val ' + (cls || '') + '">' + valHtml + '</div>'
                 + (sub ? '<div class="card-sub">' + sub + '</div>' : '')
                 + '</div>';
@@ -252,10 +256,19 @@ static const char INDEX_HTML[] = R"HTML(
                 document.getElementById('fw').textContent = 'v' + d.firmware.replace('v', '');
 
                 document.getElementById('inputs').innerHTML = d.inputs.map(function (x) {
+                    var label = x.label;
+                    if (x.name === 'left_sw') label = 'LEFT: AUTO MODE';
+                    if (x.name === 'right_sw') label = 'RIGHT: WELL MODE';
+
                     var b = x.state
                         ? '<span class="badge badge-on">ACTIVE</span>'
                         : '<span class="badge badge-off">IDLE</span>';
-                    return card(x.label, b, null, x.state ? 'c-on' : 'c-off');
+
+                    var sub = (!d.inputs.some(function (i) { return i.state; }))
+                        ? 'MIDDLE: INACTIVE'
+                        : null;
+
+                    return card(label, b, sub, x.state ? 'c-on' : 'c-off', x.state ? 'card-active' : '');
                 }).join('');
 
                 document.getElementById('outputs').innerHTML = d.outputs.map(function (x) {
