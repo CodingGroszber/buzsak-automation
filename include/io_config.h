@@ -93,7 +93,7 @@ inline float pressureMvToBar(uint32_t mv)
 constexpr uint32_t WATER_LEVEL_UPPER_BOUND_MV = 2400;
 constexpr uint32_t WATER_LEVEL_FULL_L = 1000;               // 2400 mV (clamped full-scale)
 constexpr uint32_t WATER_LEVEL_EMPTY_L = 0;                 // 0 mV (linear map origin)
-constexpr uint32_t WATER_LEVEL_LOW_L = 50;                  // 120 mV (50/1000 of 2400 mV)
+constexpr uint32_t WATER_LEVEL_LOW_L = 100;                 // 120 mV (50/1000 of 2400 mV)
 constexpr uint32_t WATER_LEVEL_HIGH_L = WATER_LEVEL_FULL_L; // 2400 mV
 constexpr uint32_t WATER_LEVEL_CAL_POINT_MV = 2200;
 constexpr float WATER_LEVEL_CAL_POINT_L =
