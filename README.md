@@ -30,17 +30,68 @@ The selector switch drives three operating modes, evaluated every 50 ms scan cyc
 | Switch position | `I0_0` | `I0_1` | Switch LED (`Q0_2`) | Well pump (`Q0_0`) | Tank pump (`Q0_1`) |
 |----------------|--------|--------|---------------------|--------------------|-------------------|
 | **Neutral** (middle) | HIGH | HIGH | OFF | OFF | OFF |
-| **Right** | LOW | HIGH | Solid ON | 3 s ON / 3 s OFF | 5 s ON / 5 s OFF |
+| **Right — AUTO** | LOW | HIGH | Solid ON | Water-level hysteresis (see below) | Pressure hysteresis (see below) |
 | **Left** | HIGH | LOW | Blink 0.5 s | Continuously ON | OFF |
 
-> Both inputs active simultaneously → Right takes priority.  
-> On any mode transition the pump timers reset: Right mode starts with both pumps OFF; Left mode turns the well pump ON immediately.
+> Both inputs active simultaneously → Right takes priority.
+
+### AUTO mode — control loops (Right switch)
+
+#### Well pump (`Q0_0`) — water-level hysteresis
+
+| Condition | Well pump |
+|-----------|----------|
+| Level is low (restart threshold, in liters) | → **ON** |
+| Level reaches `WATER_LEVEL_HIGH_L` (full) | → **OFF** |
+
+Control implementation uses liters from `waterLevelMvToLiters(...)`, then applies hysteresis against liter constants.
+
+#### Tank pump (`Q0_1`) — pressure hysteresis
+
+| Condition | Tank pump |
+|-----------|----------|
+| Pressure drops below **3 bar** | → **ON** (start filling) |
+| Pressure reaches **4 bar** | → **OFF** (target reached) |
+| Pressure ≤ 0.1 bar (pipe rupture / sensor fault) | → **OFF** (safety stop) |
 
 Serial monitor output on state changes:
 ```
-[WELL] ON / [WELL] OFF   — well pump toggled (Right mode)
-[TANK] ON / [TANK] OFF   — tank pump toggled (Right mode)
+[WELL] ON   834 L  2000 mV
+[WELL] OFF  1000 L 2400 mV
+[TANK] ON   2.43 bar   — pump started
+[TANK] OFF  4.01 bar   — target reached
 ```
+
+---
+
+## Usage (day-to-day)
+
+### 1) Normal operation
+
+1. Put selector switch in **Right (AUTO)**.
+2. Open status page: `http://192.168.1.94/`.
+3. Verify:
+  - Pressure card shows **bar** with **mV** sub-value.
+  - Water-level card shows **L** with **mV** sub-value.
+4. Confirm expected transitions:
+  - Well pump starts/stops from level hysteresis.
+  - Tank pump starts/stops from pressure hysteresis.
+
+### 2) Manual mode behavior
+
+1. Move selector switch to **Left**.
+2. Expected:
+  - Well pump forced ON.
+  - Tank pump forced OFF.
+  - Switch LED blinks every 0.5 s.
+
+### 3) Safe stop
+
+1. Move selector to **Neutral**.
+2. Expected:
+  - Both pumps OFF.
+  - Switch LED OFF.
+  - AUTO hysteresis state reset.
 
 ---
 
@@ -111,6 +162,7 @@ digitalWrite(Q0_0, LOW);      // output OFF
 - **WiFi + OTA** — connects to the configured network on boot; supports over-the-air firmware updates via ArduinoOTA and [ElegantOTA](https://github.com/ayushsharma82/ElegantOTA) (`/update`)
 - **REST API** — lightweight JSON endpoints consumed by a companion app or Flask server
   - `GET /api/state` — full IO snapshot (firmware version, IP, all input & output states)
+  - Analog payload includes raw `mv`; pressure channel adds `bar`; water-level channel adds `liters` and `low`
   - `POST /api/control` — override any `controllable` output (`name=<key>&state=<1|0>`)
 - **Built-in status page** — `GET /` serves a dark-theme HTML dashboard that auto-refreshes every 2 seconds
 - **WiFi watchdog** — automatically reconnects if the connection drops
@@ -146,16 +198,18 @@ Add ladder rungs or sequential logic inside `plcLoop()` in `src/logic.cpp`. The 
 
 ## Configuration
 
-| Setting | Location | Default |
+| Setting | Location | Value |
 |---|---|---|
-| WiFi SSID / password | `src/wifi_network.cpp` | `neunet` / `****` |
+| WiFi SSID / password | `src/wifi_network.cpp` | Local secret (see `login.md`, gitignored) |
 | Firmware version | `include/io_config.h` | `v4.0` |
 | OTA hostname | `src/wifi_network.cpp` | `PLC-14IO-Cabinet1` |
-| OTA password | `src/wifi_network.cpp` | `admin` |
-| Upload port | `platformio.ini` | `COM3` (USB) / `192.168.1.94` (OTA) |
+| ArduinoOTA password | `src/wifi_network.cpp` | Local secret (see `login.md`, gitignored) |
+| ElegantOTA user / password | `src/wifi_network.cpp` | Local secret (see `login.md`, gitignored) |
+| Upload target | `platformio.ini` `default_envs` | `ota` (WiFi) or `usb` (COM3) |
+| OTA device IP | `platformio.ini` `[env:ota]` | `192.168.1.94` |
 | Diagnostic enable | `platformio.ini` `build_flags` | `DIAG_ENABLED=1` (currently on) |
-| Shunt resistance | `include/diag.h` `DIAG_SHUNT_OHMS` | `165.0` Ω |
-| Voltage divider | `include/diag.h` `DIAG_V_DIVIDER` | `3.0303` |
+| Shunt resistance | `platformio.ini` `build_flags` | `DIAG_SHUNT_OHMS=470.0` Ω |
+| Voltage divider | `platformio.ini` `build_flags` | `DIAG_V_DIVIDER=3.82` (calibrated) |
 | Diag sample interval | `include/diag.h` `DIAG_INTERVAL_MS` | `2000` ms |
 | Diag CSV size cap | `include/diag.h` `DIAG_MAX_BYTES` | `512 KB` |
 
@@ -165,9 +219,8 @@ Add ladder rungs or sequential logic inside `plcLoop()` in `src/logic.cpp`. The 
 
 | # | Issue | Status |
 |---|-------|--------|
-| 1 | **Analog inputs reading invalid values** — pressure (PT506) and water level (TL-136) sensors wired correctly (Red→24V+, Black→`I0_7`/`I0_8`, GND→DC−) but `/diag` not yet readable because OTA upload is blocked by Windows Firewall on the dev machine. Diagnostic firmware is built and committed (`DIAG_ENABLED=1`). | **Open** — flash pending; workaround: allow Python through Windows Firewall then re-run OTA upload to `192.168.1.94`. |
-| 2 | **OTA upload fails from this PC** — `espota` authenticates (`OK`) but times out waiting for device response. Root cause: Windows Firewall blocks the inbound TCP connection the ESP32 opens back to the OTA host. | **Open** — fix: `Windows Defender Firewall → Allow an app → python.exe` (private network). |
-| 3 | **`DIAG_ENABLED=1` left on in repo** — diagnostic routes and LittleFS logging active in production build; should be set back to `0` once sensor readings are verified. | **Open** |
+| 1 | **`DIAG_ENABLED=1` left on** — diagnostic routes and LittleFS logging active; disable once sensor readings are finalised. | **Open** |
+| 2 | **Level sensor (TL-136) over-range** — reading ~22 mA / 10.3 V; tank is at or above sensor's 0–1 m full-scale. Needs re-zeroing or sensor repositioning. | **Open** |
 
 ---
 
@@ -183,19 +236,88 @@ Add ladder rungs or sequential logic inside `plcLoop()` in `src/logic.cpp`. The 
 ## Build & upload
 
 ```bash
-# Build
-pio run
+# Build only (OTA env)
+platformio run -e ota
 
-# Upload over USB
-pio run --target upload
-
-# Upload over WiFi (after first USB flash) — use IP, not hostname (mDNS not resolved by espota)
-pio run --target upload --upload-port 192.168.1.94
-
-# Open serial monitor
-pio device monitor
+# Build only (USB env)
+platformio run -e usb
 ```
 
-> **OTA note:** if upload authenticates but then times out, Windows Firewall is blocking the inbound callback from the device. Allow `python.exe` through the firewall (private network) and retry.
+### Upload workflows (recommended)
+
+This project supports two upload paths:
+
+1. **OTA (default env)** — fastest for iterative updates, uses `scripts/http_ota.py`
+2. **USB** — recovery path when device is offline or OTA fails
+
+### OTA upload (custom HTTP flow)
+
+`platformio.ini` uses:
+- `upload_protocol = custom`
+- `upload_command = python $PROJECT_DIR/scripts/http_ota.py $UPLOAD_PORT $SOURCE`
+
+Recommended commands on this machine:
+
+```powershell
+# From project root
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e ota --target upload
+```
+
+If dashboard HTML changes and the page looks stale, force clean + upload:
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e ota -t clean
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e ota --target upload
+```
+
+What the OTA script does:
+
+1. `GET /ota/start?mode=firmware&hash=<md5>`
+2. `POST /ota/upload` (multipart firmware)
+3. Waits for reboot and verifies device comes back online
+
+### USB upload (fallback / recovery)
+
+Use USB when:
+
+1. Device is not reachable at `192.168.1.94`
+2. WiFi credentials changed or network is unstable
+3. OTA update was interrupted
+
+Steps:
+
+1. Connect USB cable.
+2. Confirm COM port (default in this project: `COM3`).
+3. Upload:
+
+```powershell
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e usb --target upload
+```
+
+### Verify after upload
+
+1. Open `http://192.168.1.94/`.
+2. Check firmware/version string in header.
+3. Check `GET /api/state` returns expected `bar`, `liters`, and `mv` fields.
+4. Confirm switch modes and pump behavior match the truth table above.
+
+### Troubleshooting uploads
+
+1. **`pio` command not found**
+  - Use full executable path:
+    `"$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe"`
+2. **OTA succeeds but webpage looks old**
+  - Run clean build before upload.
+  - Hard refresh browser (`Ctrl+F5`) or open private window.
+3. **OTA cannot connect to host**
+  - Verify PLC IP in `platformio.ini` (`upload_port = 192.168.1.94`).
+  - Ensure PC and PLC are on same subnet.
+  - Fallback to USB upload.
+4. **Wrong COM port on USB**
+  - Update `upload_port` under `[env:usb]` in `platformio.ini`.
+
+> **ElegantOTA (browser alternative):** open `http://192.168.1.94/update`, authenticate with local credentials from `login.md`, then upload `.pio/build/ota/firmware.bin`.
+
+> **ArduinoOTA note:** if you use ArduinoOTA transport instead of the custom HTTP uploader, you may need an inbound firewall rule for PlatformIO Python.
 ## Circut Diagram ( placeholder )
 ![Circuit Diagram 1](docs/images/circuit_1.svg)

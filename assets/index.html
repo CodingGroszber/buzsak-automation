@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Garden PLC</title>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        :root {
+            --bg: #0c0c0c;
+            --surface: #141414;
+            --border: #222;
+            --text: #d4d4d4;
+            --dim: #555;
+            --dim2: #3a3a3a;
+            --on: #22c55e;
+            --off: #444;
+            --warn: #ef4444;
+            --accent: #3b82f6;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 13px;
+            padding: 14px;
+            max-width: 900px;
+            margin: 0 auto
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none
+        }
+
+        /* ── header ── */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 14px
+        }
+
+        .site-name {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: .3px
+        }
+
+        .site-name span {
+            color: var(--accent)
+        }
+
+        .meta {
+            color: var(--dim);
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--on);
+            flex-shrink: 0;
+            transition: background .4s
+        }
+
+        .dot.stale {
+            background: var(--warn)
+        }
+
+        /* ── section title ── */
+        .sec {
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            color: var(--dim);
+            margin: 16px 0 7px
+        }
+
+        /* ── grid ── */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 6px
+        }
+
+        /* ── card ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 9px 11px
+        }
+
+        .card-lbl {
+            font-size: 10px;
+            color: var(--dim);
+            margin-bottom: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis
+        }
+
+        .card-val {
+            font-size: 22px;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -.5px
+        }
+
+        .card-sub {
+            font-size: 10px;
+            color: var(--dim);
+            margin-top: 4px
+        }
+
+        /* ── state colours ── */
+        .c-on {
+            color: var(--on)
+        }
+
+        .c-off {
+            color: var(--dim2)
+        }
+
+        .c-accent {
+            color: var(--accent)
+        }
+
+        .c-warn {
+            color: var(--warn)
+        }
+
+        /* ── badges ── */
+        .badge {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .8px;
+            padding: 2px 6px;
+            border-radius: 3px
+        }
+
+        .badge-on {
+            background: rgba(34, 197, 94, .12);
+            color: var(--on);
+            border: 1px solid rgba(34, 197, 94, .25)
+        }
+
+        .badge-off {
+            background: rgba(68, 68, 68, .2);
+            color: var(--dim);
+            border: 1px solid var(--dim2)
+        }
+
+        .badge-warn {
+            background: rgba(239, 68, 68, .12);
+            color: var(--warn);
+            border: 1px solid rgba(239, 68, 68, .25)
+        }
+
+        /* ── unit ── */
+        .unit {
+            font-size: 12px;
+            font-weight: 500;
+            margin-left: 2px;
+            color: var(--dim)
+        }
+
+        /* ── footer ── */
+        footer {
+            margin-top: 18px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center
+        }
+
+        .uptime {
+            color: var(--dim);
+            font-size: 10px
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="site-name">&#9881; Garden PLC <span>· Cabinet 1</span></div>
+        <div class="meta">
+            <span class="dot" id="dot"></span>
+            <span id="ip">connecting…</span>
+            <span id="fw"></span>
+        </div>
+    </header>
+
+    <div class="sec">Inputs</div>
+    <div class="grid" id="inputs"></div>
+
+    <div class="sec">Outputs</div>
+    <div class="grid" id="outputs"></div>
+
+    <div class="sec">Analog</div>
+    <div class="grid" id="analog"></div>
+
+    <footer>
+        <a href="/update">&#8593; firmware update</a>
+        <span class="uptime" id="uptime"></span>
+    </footer>
+
+    <script>
+        var t0 = Date.now();
+
+        function card(lbl, valHtml, sub, cls) {
+            return '<div class="card"><div class="card-lbl">' + lbl + '</div>'
+                + '<div class="card-val ' + (cls || '') + '">' + valHtml + '</div>'
+                + (sub ? '<div class="card-sub">' + sub + '</div>' : '')
+                + '</div>';
+        }
+
+        function badge(on) {
+            return on
+                ? '<span class="badge badge-on">ON</span>'
+                : '<span class="badge badge-off">OFF</span>';
+        }
+
+        async function refresh() {
+            try {
+                var r = await fetch('/api/state');
+                var d = await r.json();
+                document.getElementById('dot').className = 'dot';
+                document.getElementById('ip').textContent = d.ip;
+                document.getElementById('fw').textContent = 'v' + d.firmware.replace('v', '');
+
+                document.getElementById('inputs').innerHTML = d.inputs.map(function (x) {
+                    var b = x.state
+                        ? '<span class="badge badge-on">ACTIVE</span>'
+                        : '<span class="badge badge-off">IDLE</span>';
+                    return card(x.label, b, null, x.state ? 'c-on' : 'c-off');
+                }).join('');
+
+                document.getElementById('outputs').innerHTML = d.outputs.map(function (x) {
+                    return card(x.label, badge(x.state), null, x.state ? 'c-on' : 'c-off');
+                }).join('');
+
+                document.getElementById('analog').innerHTML = d.analog.map(function (x) {
+                    if (!x.signal) return card(x.label, '<span class="badge badge-off">—</span>', null, 'c-off');
+                    if (x.bar != null) {
+                        return card(x.label,
+                            x.bar.toFixed(2) + '<span class="unit">bar</span>',
+                            x.mv + ' mV',
+                            x.bar >= 4 ? 'c-on' : x.bar < 0.5 ? 'c-warn' : 'c-accent');
+                    }
+                    if (x.liters != null) {
+                        return card(x.label,
+                            x.liters.toFixed(0) + '<span class="unit">L</span>',
+                            x.mv + ' mV',
+                            x.low ? 'c-warn' : 'c-accent');
+                    }
+                    return card(x.label, x.mv + '<span class="unit">mV</span>', null, 'c-accent');
+                }).join('');
+
+                var s = ((Date.now() - t0) / 1000) | 0;
+                document.getElementById('uptime').textContent =
+                    (s >= 3600 ? (s / 3600 | 0) + 'h ' : '') +
+                    (s >= 60 ? ((s % 3600) / 60 | 0) + 'm ' : '') +
+                    (s % 60) + 's uptime';
+
+            } catch (e) {
+                document.getElementById('dot').className = 'dot stale';
+            }
+        }
+        setInterval(refresh, 2000);
+        refresh();
+    </script>
+</body>
+
+</html>

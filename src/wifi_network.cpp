@@ -5,6 +5,7 @@
 #include <ElegantOTA.h>
 #include "io_config.h"
 #include "wifi_network.h"
+#include "html_assets.h"
 
 // ── WiFi credentials ─────────────────────────────────────────
 const char *ssid = "neunet";
@@ -77,11 +78,24 @@ static void handleApiState()
     {
         if (i)
             json += ",";
-        int raw = analogRead(ANALOG_INPUTS[i].pin);
+        uint32_t mv = analogReadMilliVolts(ANALOG_INPUTS[i].pin);
+        String analogName = String(ANALOG_INPUTS[i].name);
+        bool isPressure = (analogName == "pressure");
+        bool isWaterLevel = (analogName == "water_level");
+        bool valid = isPressure ? (mv > PRESSURE_MIN_VALID_MV) : (mv > 0);
         json += "{\"name\":\"" + String(ANALOG_INPUTS[i].name) + "\",";
         json += "\"label\":\"" + String(ANALOG_INPUTS[i].label) + "\",";
-        json += "\"raw\":" + String(raw) + ",";
-        json += "\"signal\":" + String(raw == 65535 ? "false" : "true") + "}";
+        json += "\"mv\":" + String(mv) + ",";
+        json += "\"signal\":" + String(valid ? "true" : "false");
+        if (valid && isPressure)
+            json += ",\"bar\":" + String(pressureMvToBar(mv), 2);
+        if (isWaterLevel)
+        {
+            float liters = waterLevelMvToLiters(mv);
+            json += ",\"liters\":" + String(liters, 0);
+            json += ",\"low\":" + String(liters <= WATER_LEVEL_LOW_L ? "true" : "false");
+        }
+        json += "}";
     }
     json += "]";
 
@@ -123,58 +137,10 @@ static void handleApiControl()
     server.send(404, "application/json", "{\"ok\":false,\"error\":\"Output not found\"}");
 }
 
-// ── GET / — built-in HTML status page ────────────────────────
+// ── GET / — serve the HTML dashboard from Flash ──────────────
 static void handleRoot()
 {
-    String html = "<!DOCTYPE html><html><head>";
-    html += "<meta charset='UTF-8'>";
-    html += "<meta name='viewport' content='width=device-width,initial-scale=1'>";
-    html += "<meta http-equiv='refresh' content='2'>";
-    html += "<title>PLC Cabinet 1</title>";
-    html += "<style>";
-    html += "body{font-family:Arial,sans-serif;background:#1a1a2e;color:#eee;text-align:center;padding:40px}";
-    html += "h1{color:#00d4ff}h2{color:#aaa;font-size:.85em;margin:24px 0 8px;text-transform:uppercase;letter-spacing:1px}";
-    html += ".card{background:#16213e;border-radius:12px;padding:18px;margin:10px auto;max-width:400px}";
-    html += ".label{color:#aaa;font-size:.9em}.value{font-size:1.4em;font-weight:bold;margin-top:4px}";
-    html += ".on{color:#00ff99}.off{color:#ff4444}.neutral{color:#00d4ff}";
-    html += "a.btn{display:inline-block;margin-top:30px;padding:12px 28px;background:#00d4ff;color:#000;border-radius:8px;text-decoration:none;font-weight:bold}";
-    html += "</style></head><body>";
-    html += "<h1>&#127981; PLC Cabinet 1</h1>";
-
-    html += "<div class='card'><div class='label'>Firmware</div><div class='value neutral'>" + String(FIRMWARE_VERSION) + "</div></div>";
-    html += "<div class='card'><div class='label'>IP Address</div><div class='value neutral'>" + WiFi.localIP().toString() + "</div></div>";
-
-    html += "<h2>Inputs</h2>";
-    for (int i = 0; i < NUM_INPUTS; i++)
-    {
-        bool s = digitalRead(INPUTS[i].pin);
-        html += "<div class='card'><div class='label'>" + String(INPUTS[i].label) + "</div>";
-        html += "<div class='value " + String(s ? "on" : "off") + "'>" + String(s ? "&#9679; ACTIVE" : "&#9675; INACTIVE") + "</div></div>";
-    }
-
-    html += "<h2>Outputs</h2>";
-    for (int i = 0; i < NUM_OUTPUTS; i++)
-    {
-        bool s = digitalRead(OUTPUTS[i].pin);
-        html += "<div class='card'><div class='label'>" + String(OUTPUTS[i].label) + "</div>";
-        html += "<div class='value " + String(s ? "on" : "off") + "'>" + String(s ? "&#9889; ON" : "&#9675; OFF") + "</div></div>";
-    }
-
-    html += "<h2>Analog Inputs (raw ADC)</h2>";
-    for (int i = 0; i < NUM_ANALOG_SENSORS; i++)
-    {
-        int raw = analogRead(ANALOG_INPUTS[i].pin);
-        bool noSignal = (raw == 65535);
-        html += "<div class='card'><div class='label'>" + String(ANALOG_INPUTS[i].label) + "</div>";
-        html += "<div class='value " + String(noSignal ? "off" : "neutral") + "'>";
-        html += noSignal ? "&#9675; No signal (&lt;4mA)" : (String(raw) + " / 4095");
-        html += "</div></div>";
-    }
-
-    html += "<a class='btn' href='/update'>&#128295; Upload Firmware</a>";
-    html += "<p style='color:#555;font-size:.8em;margin-top:20px'>&#128257; Auto-refreshing every 2 seconds</p>";
-    html += "</body></html>";
-    server.send(200, "text/html", html);
+    server.send_P(200, "text/html", INDEX_HTML);
 }
 
 // ── Network setup (called once from main setup()) ─────────────
@@ -184,7 +150,7 @@ void setupNetwork()
 
     // ArduinoOTA
     ArduinoOTA.setHostname("PLC-14IO-Cabinet1");
-    ArduinoOTA.setPassword("admin");
+    ArduinoOTA.setPassword("askim");
     ArduinoOTA.onStart([]()
                        {
     int led = wifiLedIndex();
@@ -213,6 +179,7 @@ void setupNetwork()
     server.on("/api/state", HTTP_GET, handleApiState);
     server.on("/api/control", HTTP_POST, handleApiControl);
 
+    ElegantOTA.setAuth("neugarden", "askim");
     ElegantOTA.begin(&server);
     server.begin();
 

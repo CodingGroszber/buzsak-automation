@@ -24,12 +24,13 @@ namespace
         bool currentMode;  // true = interpret as 4–20 mA, false = 0–10 V
     };
 
-    // All four candidate analog pins across both board variants.
+    // AC_EN=LOW → 0-10 V front-end active; GPIO 34/35 read via internal divider.
+    // GPIO 32/33 (MA path) will float — kept for comparison only.
     const ProbePin PROBES[] = {
-        {"I0.7_MA", 32, true}, // 4–20 mA channel 0 (this board)
-        {"I0.8_MA", 33, true}, // 4–20 mA channel 1 (this board)
-        {"I0.7_V", 34, false}, // 0–10 V channel 0 (other variant)
-        {"I0.8_V", 35, false}, // 0–10 V channel 1 (other variant)
+        {"I0.7_MA", 32, true}, // MA path — inactive (AC_EN=LOW)
+        {"I0.8_MA", 33, true}, // MA path — inactive (AC_EN=LOW)
+        {"I0.7_V", 34, false}, // V path  — ACTIVE (GPIO 34, internal divider)
+        {"I0.8_V", 35, false}, // V path  — ACTIVE (GPIO 35, internal divider)
     };
     constexpr int NUM_PROBES = sizeof(PROBES) / sizeof(PROBES[0]);
 
@@ -59,9 +60,11 @@ namespace
         int adcCal = analogRead(p.gpio);
         uint32_t mv = analogReadMilliVolts(p.gpio);
 
-        // Both interpretations are always logged; only the relevant one is
-        // physically meaningful for a given wiring, the other is a sanity check.
-        float current_mA = (mv / 1000.0f) / DIAG_SHUNT_OHMS * 1000.0f;
+        // V-path: field_V = mv × divider; I = field_V / shunt
+        // MA-path: I = mv / shunt (no divider in that signal path)
+        float current_mA = p.currentMode
+                               ? (mv / 1000.0f) / DIAG_SHUNT_OHMS * 1000.0f
+                               : (mv / 1000.0f) * DIAG_V_DIVIDER / DIAG_SHUNT_OHMS * 1000.0f;
         float voltage_V = (mv / 1000.0f) * DIAG_V_DIVIDER;
 
         String row = String(t) + "," + p.label + "," + String(p.gpio) + ",";
@@ -134,7 +137,7 @@ namespace
         html += "th{color:#0ff}td:first-child,th:first-child{text-align:left}";
         html += "a{color:#0ff}</style></head><body>";
         html += "<h2>Analog Probe Diagnostic</h2>";
-        html += "<p>shunt=" + String(DIAG_SHUNT_OHMS, 1) + "&#8486; &nbsp; divider=" + String(DIAG_V_DIVIDER, 4) + "</p>";
+        html += "<p>mode=<b>0-10V</b> (AC_EN=LOW) &nbsp; ext-shunt=" + String(DIAG_SHUNT_OHMS, 0) + "&#8486; &nbsp; divider=" + String(DIAG_V_DIVIDER, 4) + " &nbsp; active: GPIO 34/35</p>";
         html += "<table><tr><th>Pin</th><th>GPIO</th><th>adc_raw</th><th>adc_cal</th>";
         html += "<th>mV</th><th>current_mA</th><th>voltage_V</th></tr>";
         for (int i = 0; i < NUM_PROBES; i++)
@@ -143,7 +146,9 @@ namespace
             uint16_t adcRaw = __analogRead(p.gpio);
             int adcCal = analogRead(p.gpio);
             uint32_t mv = analogReadMilliVolts(p.gpio);
-            float current_mA = (mv / 1000.0f) / DIAG_SHUNT_OHMS * 1000.0f;
+            float current_mA = p.currentMode
+                                   ? (mv / 1000.0f) / DIAG_SHUNT_OHMS * 1000.0f
+                                   : (mv / 1000.0f) * DIAG_V_DIVIDER / DIAG_SHUNT_OHMS * 1000.0f;
             float voltage_V = (mv / 1000.0f) * DIAG_V_DIVIDER;
             html += "<tr><td>" + String(p.label) + "</td><td>" + String(p.gpio) + "</td>";
             html += "<td>" + String(adcRaw) + "</td><td>" + String(adcCal) + "</td>";
@@ -162,6 +167,12 @@ void diagSetup()
 {
     for (int i = 0; i < NUM_PROBES; i++)
         pinMode(PROBES[i].gpio, INPUT);
+
+    // Override framework default (AC_EN=HIGH for MA) → enable 0-10 V front-end
+#ifdef AC7_EN
+    digitalWrite(AC7_EN, LOW);
+    digitalWrite(AC8_EN, LOW);
+#endif
 
     fsReady = LittleFS.begin(true); // format on first use if needed
     if (fsReady)
