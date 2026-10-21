@@ -4,6 +4,7 @@
 #include <ArduinoOTA.h>
 #include <ElegantOTA.h>
 #include "io_config.h"
+#include "logic.h"
 #include "wifi_network.h"
 #include "html_assets.h"
 
@@ -47,18 +48,9 @@ static void handleApiState()
     String json = "{";
     json += "\"firmware\":\"" + String(FIRMWARE_VERSION) + "\",";
     json += "\"ip\":\"" + WiFi.localIP().toString() + "\",";
-
-    json += "\"inputs\":[";
-    for (int i = 0; i < NUM_INPUTS; i++)
-    {
-        if (i)
-            json += ",";
-        bool s = digitalRead(INPUTS[i].pin);
-        json += "{\"name\":\"" + String(INPUTS[i].name) + "\",";
-        json += "\"label\":\"" + String(INPUTS[i].label) + "\",";
-        json += "\"state\":" + String(s ? "true" : "false") + "}";
-    }
-    json += "],";
+    json += "\"switch_mode\":" + String(plcSwitchMode()) + ",";
+    json += "\"refill_button\":" + String(refillButtonIsHigh() ? "true" : "false") + ",";
+    json += "\"refill_active\":" + String(refillIsActive() ? "true" : "false") + ",";
 
     json += "\"outputs\":[";
     for (int i = 0; i < NUM_OUTPUTS; i++)
@@ -104,8 +96,7 @@ static void handleApiState()
 }
 
 // ── POST /api/control ─────────────────────────────────────────
-// Form body: name=<output_name>&state=<1|0>
-// Only sets the output if controllable=true
+// Form body: name=refill&state=<1|0>
 static void handleApiControl()
 {
     String name = server.arg("name");
@@ -117,24 +108,44 @@ static void handleApiControl()
         return;
     }
 
-    bool newState = (stateStr == "1" || stateStr == "true");
-
-    for (int i = 0; i < NUM_OUTPUTS; i++)
+    if (name != "refill")
     {
-        if (name.equals(OUTPUTS[i].name))
-        {
-            if (!OUTPUTS[i].controllable)
-            {
-                server.send(403, "application/json", "{\"ok\":false,\"error\":\"Not controllable\"}");
-                return;
-            }
-            digitalWrite(OUTPUTS[i].pin, newState ? HIGH : LOW);
-            server.send(200, "application/json", "{\"ok\":true}");
-            Serial.println("[CTRL] " + name + " -> " + String(newState ? "ON" : "OFF"));
-            return;
-        }
+        server.send(403, "application/json", "{\"ok\":false,\"error\":\"Only refill is controllable\"}");
+        return;
     }
-    server.send(404, "application/json", "{\"ok\":false,\"error\":\"Output not found\"}");
+
+    bool newState;
+    if (stateStr == "1" || stateStr == "true")
+        newState = true;
+    else if (stateStr == "0" || stateStr == "false")
+        newState = false;
+    else
+    {
+        server.send(400, "application/json", "{\"ok\":false,\"error\":\"State must be true or false\"}");
+        return;
+    }
+
+    if (!newState)
+    {
+        String buttonState = refillButtonIsHigh() ? "true" : "false";
+        server.send(200, "application/json", "{\"ok\":true,\"refill_button\":" + buttonState + "}");
+        return;
+    }
+
+    if (plcSwitchMode() != 1)
+    {
+        server.send(409, "application/json", "{\"ok\":false,\"error\":\"Selector must be in automatic mode\"}");
+        return;
+    }
+    if (refillIsActive() || refillButtonIsHigh())
+    {
+        server.send(409, "application/json", "{\"ok\":false,\"error\":\"Refill already requested or active\"}");
+        return;
+    }
+
+    TriggerRefill(true);
+    server.send(200, "application/json", "{\"ok\":true,\"refill_button\":true}");
+    Serial.println("[CTRL] refill requested");
 }
 
 // ── GET / — serve the HTML dashboard from Flash ──────────────

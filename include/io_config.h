@@ -1,7 +1,7 @@
 #pragma once
 
 // ── Firmware version ─────────────────────────────────────────
-#define FIRMWARE_VERSION "v4.0"
+#define FIRMWARE_VERSION "v4.1"
 
 // ═════════════════════════════════════════════════════════════
 //  IO CONFIGURATION — shared types and extern declarations
@@ -90,14 +90,14 @@ inline float pressureMvToBar(uint32_t mv)
 //    ~2450 mV is observed at full tank; clamp conversion at 2400 mV
 //    to keep output stable at 1000 L max.
 // ═════════════════════════════════════════════════════════════
-constexpr uint32_t WATER_LEVEL_UPPER_BOUND_MV = 2400;
-constexpr uint32_t WATER_LEVEL_FULL_L = 1000;               // 2400 mV (clamped full-scale)
-constexpr uint32_t WATER_LEVEL_EMPTY_L = 0;                 // 0 mV (linear map origin)
-constexpr uint32_t WATER_LEVEL_LOW_L = 100;                 // 120 mV (50/1000 of 2400 mV)
-constexpr uint32_t WATER_LEVEL_HIGH_L = WATER_LEVEL_FULL_L; // 2400 mV
-constexpr uint32_t WATER_LEVEL_CAL_POINT_MV = 2200;
-constexpr float WATER_LEVEL_CAL_POINT_L =
-    (static_cast<float>(WATER_LEVEL_CAL_POINT_MV) / static_cast<float>(WATER_LEVEL_UPPER_BOUND_MV)) * static_cast<float>(WATER_LEVEL_FULL_L); // ~833.33 L
+constexpr uint32_t WATER_LEVEL_UPPER_BOUND_MV = 2400; // mV at clamped full tank
+constexpr uint32_t WATER_LEVEL_FULL_L = 1000;         // L at WATER_LEVEL_UPPER_BOUND_MV
+constexpr uint32_t WATER_LEVEL_EMPTY_L = 0;           // L at 0 mV (linear map origin)
+
+// Well pump hysteresis thresholds — already in liters, used directly against
+// waterLevelMvToLiters() output (do not re-scale through the mV bound above).
+constexpr float WATER_LEVEL_LOW_L = 300.0f;                                  // restart well pump at/below this level
+constexpr float WATER_LEVEL_HIGH_L = static_cast<float>(WATER_LEVEL_FULL_L); // stop well pump at this level
 
 inline float waterLevelMvToLiters(uint32_t mv)
 {

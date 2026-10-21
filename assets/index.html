@@ -186,6 +186,23 @@
             color: var(--dim)
         }
 
+        .refill-button {
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            padding: 7px 10px;
+            background: transparent;
+            color: var(--text);
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer
+        }
+
+        .refill-button:disabled {
+            border-color: var(--border);
+            color: var(--dim);
+            cursor: not-allowed
+        }
+
         /* ── footer ── */
         footer {
             margin-top: 18px;
@@ -213,8 +230,17 @@
         </div>
     </header>
 
-    <div class="sec">Inputs</div>
-    <div class="grid" id="inputs"></div>
+    <div class="sec">Selector</div>
+    <div class="grid" id="selector"></div>
+
+    <div class="sec">Control</div>
+    <div class="grid">
+        <div class="card">
+            <div class="card-lbl">Well tank refill</div>
+            <button class="refill-button" id="refill" type="button" onclick="requestRefill()">Trigger refill</button>
+            <div class="card-sub" id="refill-status">Waiting for PLC</div>
+        </div>
+    </div>
 
     <div class="sec">Outputs</div>
     <div class="grid" id="outputs"></div>
@@ -243,6 +269,27 @@
                 : '<span class="badge badge-off">OFF</span>';
         }
 
+        async function requestRefill() {
+            var button = document.getElementById('refill');
+            var status = document.getElementById('refill-status');
+            button.disabled = true;
+            status.textContent = 'Requesting refill';
+            try {
+                var response = await fetch('/api/control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'name=refill&state=1'
+                });
+                var result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Request rejected');
+                status.textContent = 'Refill requested';
+                refresh();
+            } catch (error) {
+                status.textContent = error.message;
+                refresh();
+            }
+        }
+
         async function refresh() {
             try {
                 var r = await fetch('/api/state');
@@ -251,21 +298,20 @@
                 document.getElementById('ip').textContent = d.ip;
                 document.getElementById('fw').textContent = 'v' + d.firmware.replace('v', '');
 
-                document.getElementById('inputs').innerHTML = d.inputs.map(function (x) {
-                    var label = x.label;
-                    if (x.name === 'left_sw') label = 'LEFT: AUTO MODE';
-                    if (x.name === 'right_sw') label = 'RIGHT: WELL MODE';
+                var modes = { '-1': 'INVALID', '0': 'OFF', '1': 'AUTOMATIC', '2': 'MANUAL' };
+                var modeName = modes[String(d.switch_mode)] || 'INVALID';
+                var modeClass = d.switch_mode === -1 ? 'c-warn' : d.switch_mode === 0 ? 'c-off' : 'c-on';
+                document.getElementById('selector').innerHTML = card('Physical selector', modeName, null, modeClass);
 
-                    var b = x.state
-                        ? '<span class="badge badge-on">ACTIVE</span>'
-                        : '<span class="badge badge-off">IDLE</span>';
-
-                    var sub = (!d.inputs.some(function (i) { return i.state; }))
-                        ? 'MIDDLE: INACTIVE'
-                        : null;
-
-                    return card(label, b, sub, x.state ? 'c-on' : 'c-off', x.state ? 'card-active' : '');
-                }).join('');
+                var refillButton = document.getElementById('refill');
+                refillButton.disabled = d.switch_mode !== 1 || d.refill_active || d.refill_button;
+                document.getElementById('refill-status').textContent = d.refill_active
+                    ? 'Filling to high-level threshold'
+                    : d.switch_mode !== 1
+                        ? 'Automatic mode required'
+                        : d.refill_button
+                            ? 'Request pulse active'
+                            : 'Ready';
 
                 document.getElementById('outputs').innerHTML = d.outputs.map(function (x) {
                     return card(x.label, badge(x.state), null, x.state ? 'c-on' : 'c-off');

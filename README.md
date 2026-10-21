@@ -32,8 +32,9 @@ The selector switch drives three operating modes, evaluated every 50 ms scan cyc
 | **Neutral** (middle) | HIGH | HIGH | OFF | OFF | OFF |
 | **Right — AUTO** | LOW | HIGH | Solid ON | Water-level hysteresis (see below) | Pressure hysteresis (see below) |
 | **Left** | HIGH | LOW | Blink 0.5 s | Continuously ON | OFF |
+| **Invalid** (both active) | LOW | LOW | OFF | OFF | OFF |
 
-> Both inputs active simultaneously → Right takes priority.
+Both selector contacts active is invalid and fails safe with both pumps OFF.
 
 ### AUTO mode — control loops (Right switch)
 
@@ -45,6 +46,10 @@ The selector switch drives three operating modes, evaluated every 50 ms scan cyc
 | Level reaches `WATER_LEVEL_HIGH_L` (full) | → **OFF** |
 
 Control implementation uses liters from `waterLevelMvToLiters(...)`, then applies hysteresis against liter constants.
+
+#### Remote refill
+
+The only remotely controllable action is a momentary refill request. It is accepted only in AUTO mode, starts the well pump, and continues until `WATER_LEVEL_HIGH_L`. The request button is reported high for 500 ms, then returns low. A physical selector change cancels the refill; Neutral and Invalid stop both pumps, while Manual takes over with only the well pump active. A missing water-level signal stops refill.
 
 #### Tank pump (`Q0_1`) — pressure hysteresis
 
@@ -161,9 +166,10 @@ digitalWrite(Q0_0, LOW);      // output OFF
 
 - **WiFi + OTA** — connects to the configured network on boot; supports over-the-air firmware updates via ArduinoOTA and [ElegantOTA](https://github.com/ayushsharma82/ElegantOTA) (`/update`)
 - **REST API** — lightweight JSON endpoints consumed by a companion app or Flask server
-  - `GET /api/state` — full IO snapshot (firmware version, IP, all input & output states)
+  - `GET /api/state` — firmware version, IP, selector mode, refill state, outputs, and analog readings
   - Analog payload includes raw `mv`; pressure channel adds `bar`; water-level channel adds `liters` and `low`
-  - `POST /api/control` — override any `controllable` output (`name=<key>&state=<1|0>`)
+  - `POST /api/control` — trigger refill only (`name=refill&state=1`); the button pulse clears after 500 ms
+  - `/api/state` reports `switch_mode`: `-1` invalid, `0` off, `1` automatic, `2` manual, plus `refill_button` and `refill_active`
 - **Built-in status page** — `GET /` serves a dark-theme HTML dashboard that auto-refreshes every 2 seconds
 - **WiFi watchdog** — automatically reconnects if the connection drops
 - **Analog probe diagnostic** — build with `-DDIAG_ENABLED=1` to expose `/diag` (live HTML), `/diag.csv` (download), `/diag/clear`; samples GPIO 32/33 raw + calibrated + mV + derived current/voltage every 2 s and logs to LittleFS
